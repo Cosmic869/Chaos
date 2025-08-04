@@ -1,0 +1,45 @@
+# Discord Bot Systemd Service Configuration
+# This allows your bot to run as a system service and start automatically on boot
+
+# Instructions:
+# 1. Copy this content to /etc/systemd/system/discord-bot.service
+# 2. Replace /path/to/your/discord_bot with the actual path to your discord_bot folder
+# 3. Replace 'yourusername' with your actual username
+# 4. Enable and start the service
+
+[Unit]
+Description=Discord NSFW Verification Bot
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=yourusername
+Group=yourusername
+WorkingDirectory=/path/to/your/discord_bot
+ExecStart=/usr/bin/python3 /path/to/your/discord_bot/run_bot.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=discord-bot
+
+# Environment variables
+Environment=PYTHONUNBUFFERED=1
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/path/to/your/discord_bot
+
+[Install]
+WantedBy=multi-user.target
+
+# Commands to set up the service:
+# sudo cp systemd_service.txt /etc/systemd/system/discord-bot.service
+# sudo systemctl daemon-reload
+# sudo systemctl enable discord-bot.service
+# sudo systemctl start discord-bot.service
+# sudo systemctl status discord-bot.service
