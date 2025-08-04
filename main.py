@@ -49,34 +49,189 @@ async def on_ready():
     logger.info(f'Bot logged in as {bot.user} (ID: {bot.user.id})')
     logger.info(f'Bot is in {len(bot.guilds)} guilds')
 
+    # Sync slash commands on startup
+    try:
+        synced = await bot.tree.sync()
+        logger.info(f'Synced {len(synced)} slash commands')
+    except Exception as e:
+        logger.error(f'Failed to sync slash commands: {e}')
+
+async def create_verification_embed():
+    """Create the verification embed and view"""
+    embed = discord.Embed(
+        title="🔞 NSFW Verification Required",
+        description="To access NSFW sections, click the button below to verify your age and consent.\n\n"
+                   "**Requirements:**\n"
+                   f"• Account must be at least {config['min_account_age_days']} days old\n"
+                   "• Must be 18+ years old\n"
+                   "• Age verification screenshot (optional)",
+        color=0xff69b4
+    )
+    embed.set_footer(text="This verification process is required for legal compliance.")
+
+    view = View(timeout=None)  # Persistent view
+    view.add_item(Button(
+        label="🔞 Verify Me", 
+        style=discord.ButtonStyle.primary, 
+        custom_id=verify_button_id
+    ))
+
+    return embed, view
+
 @bot.command()
 async def postverify(ctx):
-    """Post the NSFW verification embed with button"""
+    """Post the NSFW verification embed with button (prefix command)"""
     try:
-        embed = discord.Embed(
-            title="🔞 NSFW Verification Required",
-            description="To access NSFW sections, click the button below to verify your age and consent.\n\n"
-                       "**Requirements:**\n"
-                       f"• Account must be at least {config['min_account_age_days']} days old\n"
-                       "• Must be 18+ years old\n"
-                       "• Must provide age verification screenshot",
-            color=0xff69b4
-        )
-        embed.set_footer(text="This verification process is required for legal compliance.")
-        
-        view = View(timeout=None)  # Persistent view
-        view.add_item(Button(
-            label="🔞 Verify Me", 
-            style=discord.ButtonStyle.primary, 
-            custom_id=verify_button_id
-        ))
-        
+        embed, view = await create_verification_embed()
         await ctx.send(embed=embed, view=view)
-        logger.info(f"Verification embed posted by {ctx.author} in {ctx.channel}")
-        
+        logger.info(f"Verification embed posted by {ctx.author} in {ctx.channel} (prefix command)")
+
     except Exception as e:
         logger.error(f"Error posting verification embed: {e}")
-        await ctx.send("An error occurred while posting the verification embed.", ephemeral=True)
+        await ctx.send("An error occurred while posting the verification embed.")
+
+# Slash Commands
+@bot.tree.command(name="postverify", description="Post the NSFW verification embed with button")
+@discord.app_commands.describe()
+async def slash_postverify(interaction: discord.Interaction):
+    """Post the NSFW verification embed with button (slash command)"""
+    try:
+        embed, view = await create_verification_embed()
+        await interaction.response.send_message(embed=embed, view=view)
+        logger.info(f"Verification embed posted by {interaction.user} in {interaction.channel} (slash command)")
+
+    except Exception as e:
+        logger.error(f"Error posting verification embed: {e}")
+        await interaction.response.send_message("An error occurred while posting the verification embed.", ephemeral=True)
+
+@bot.tree.command(name="botstats", description="Show bot statistics and health information")
+async def slash_botstats(interaction: discord.Interaction):
+    """Show bot statistics"""
+    try:
+        uptime = discord.utils.utcnow() - bot.user.created_at
+
+        embed = discord.Embed(
+            title="🤖 Bot Statistics",
+            color=0x00ff00,
+            timestamp=discord.utils.utcnow()
+        )
+
+        embed.add_field(name="🏓 Latency", value=f"{round(bot.latency * 1000)}ms", inline=True)
+        embed.add_field(name="🏠 Servers", value=str(len(bot.guilds)), inline=True)
+        embed.add_field(name="👥 Users", value=str(len(bot.users)), inline=True)
+        embed.add_field(name="⏰ Bot Created", value=bot.user.created_at.strftime("%Y-%m-%d"), inline=True)
+        embed.add_field(name="🔧 Commands", value="Prefix: `!` | Slash: `/`", inline=True)
+        embed.add_field(name="📊 Status", value="🟢 Online", inline=True)
+
+        embed.set_thumbnail(url=bot.user.display_avatar.url)
+        embed.set_footer(text=f"Bot ID: {bot.user.id}")
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        logger.info(f"Bot stats requested by {interaction.user}")
+
+    except Exception as e:
+        logger.error(f"Error showing bot stats: {e}")
+        await interaction.response.send_message("An error occurred while fetching bot statistics.", ephemeral=True)
+
+@bot.tree.command(name="help", description="Show available commands and bot information")
+async def slash_help(interaction: discord.Interaction):
+    """Show help information"""
+    try:
+        embed = discord.Embed(
+            title="🆘 Bot Help & Commands",
+            description="Here are all available commands for this NSFW verification bot:",
+            color=0x3498db
+        )
+
+        embed.add_field(
+            name="🔞 Verification Commands",
+            value="`/postverify` - Post the verification embed\n"
+                  "`!postverify` - Same as above (prefix version)",
+            inline=False
+        )
+
+        embed.add_field(
+            name="📊 Information Commands", 
+            value="`/botstats` - Show bot statistics\n"
+                  "`/help` - Show this help message\n"
+                  "`/ping` - Check bot response time",
+            inline=False
+        )
+
+        embed.add_field(
+            name="🔧 How Verification Works",
+            value="1. Click the 🔞 Verify Me button\n"
+                  "2. Complete the DM questionnaire\n"
+                  "3. Upload age verification screenshot (optional)\n"
+                  "4. Wait for moderator approval\n"
+                  "5. Get notified of the result",
+            inline=False
+        )
+
+        embed.add_field(
+            name="⚙️ Configuration",
+            value=f"• Minimum account age: {config['min_account_age_days']} days\n"
+                  "• Age requirement: 18+ years\n"
+                  "• Verification method: Screenshot optional",
+            inline=False
+        )
+
+        embed.set_footer(text="Need help? Contact a server administrator")
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        logger.info(f"Help requested by {interaction.user}")
+
+    except Exception as e:
+        logger.error(f"Error showing help: {e}")
+        await interaction.response.send_message("An error occurred while showing help.", ephemeral=True)
+
+@bot.tree.command(name="ping", description="Check bot response time")
+async def slash_ping(interaction: discord.Interaction):
+    """Check bot latency"""
+    try:
+        latency = round(bot.latency * 1000)
+
+        if latency < 100:
+            status = "🟢 Excellent"
+            color = 0x00ff00
+        elif latency < 200:
+            status = "🟡 Good"
+            color = 0xffff00
+        else:
+            status = "🔴 Poor"
+            color = 0xff0000
+
+        embed = discord.Embed(
+            title="🏓 Pong!",
+            description=f"**Latency:** {latency}ms\n**Status:** {status}",
+            color=color
+        )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        logger.info(f"Ping command used by {interaction.user} - {latency}ms")
+
+    except Exception as e:
+        logger.error(f"Error with ping command: {e}")
+        await interaction.response.send_message("An error occurred while checking ping.", ephemeral=True)
+
+# Admin-only slash commands
+@bot.tree.command(name="sync", description="Sync slash commands (Admin only)")
+@discord.app_commands.describe()
+async def slash_sync(interaction: discord.Interaction):
+    """Sync slash commands - Admin only"""
+    try:
+        # Check if user has administrator permissions
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ You need Administrator permissions to use this command.", ephemeral=True)
+            return
+
+        synced = await bot.tree.sync()
+        await interaction.response.send_message(f"✅ Synced {len(synced)} slash commands!", ephemeral=True)
+        logger.info(f"Slash commands synced by {interaction.user} - {len(synced)} commands")
+
+    except Exception as e:
+        logger.error(f"Error syncing commands: {e}")
+        await interaction.response.send_message("An error occurred while syncing commands.", ephemeral=True)
 
 @bot.event
 async def on_interaction(interaction):
@@ -85,7 +240,7 @@ async def on_interaction(interaction):
         return
 
     custom_id = interaction.data.get("custom_id", "")
-    
+
     try:
         if custom_id == verify_button_id:
             await handle_verification_start(interaction)
@@ -106,7 +261,7 @@ async def on_interaction(interaction):
 async def handle_verification_start(interaction):
     """Handle the initial verification button click"""
     user = interaction.user
-    
+
     # Anti-alt check
     account_age_days = (discord.utils.utcnow() - user.created_at).days
     if account_age_days < config['min_account_age_days']:
@@ -124,7 +279,7 @@ async def handle_verification_start(interaction):
             "✅ I've sent you a DM with the verification form. Please check your direct messages.", 
             ephemeral=True
         )
-        
+
         # Start DM verification process
         await user.send(
             "🔞 **NSFW Verification Process**\n\n"
@@ -133,7 +288,7 @@ async def handle_verification_start(interaction):
             "⏰ You have 5 minutes to complete each step.\n\n"
             "**Let's begin:**"
         )
-        
+
         questions = [
             "**1.** What is your Discord username and ID? (You can copy this: `{}`#{})".format(user.name, user.discriminator),
             "**2.** How old are you? (Must be 18 or older)",
@@ -142,20 +297,20 @@ async def handle_verification_start(interaction):
         ]
 
         answers = []
-        
+
         # Ask text questions with timeout
         for i, question in enumerate(questions, 1):
             await user.send(f"{question}")
-            
+
             try:
                 def check(m):
                     return (m.author == user and 
                            isinstance(m.channel, discord.DMChannel) and 
                            len(m.content.strip()) > 0)
-                
+
                 msg = await bot.wait_for('message', timeout=300, check=check)  # 5 minutes
                 answers.append(msg.content.strip())
-                
+
                 # Validate critical answers
                 if i == 2:  # Age question
                     try:
@@ -173,33 +328,41 @@ async def handle_verification_start(interaction):
                         await user.send("❌ You must consent and agree to the rules to access NSFW content. Verification cancelled.")
                         logger.info(f"Verification cancelled for {user} - did not consent/agree")
                         return
-                
+
                 await user.send("✅ Answer recorded.")
-                
+
             except asyncio.TimeoutError:
                 await user.send("⏰ Verification timed out. Please start over by clicking the verification button again.")
                 logger.info(f"Verification timed out for {user} at question {i}")
                 return
 
-        # Ask for screenshot
+        # Ask for screenshot (now optional)
         await user.send(
-            "**5.** Please upload a screenshot showing your age verification.\n"
+            "**5.** Please upload a screenshot showing your age verification, or type 'skip' to proceed without one.\n"
             "This could be:\n"
             "• Government ID (blur out sensitive info, keep age/DOB visible)\n"
             "• Birth certificate (blur sensitive info)\n"
             "• Any official document showing your date of birth\n\n"
-            "**Important:** Blur out all personal information except your age/date of birth."
+            "**Important:** Blur out all personal information except your age/date of birth.\n"
+            "**Note:** You can type 'skip' if you prefer not to upload a screenshot."
         )
-        
+
+        image_url = None
         try:
-            def check_image(m):
+            def check_image_or_skip(m):
                 return (m.author == user and 
                        isinstance(m.channel, discord.DMChannel) and 
-                       len(m.attachments) > 0)
-            
-            img_msg = await bot.wait_for('message', timeout=600, check=check_image)  # 10 minutes for upload
-            image_url = img_msg.attachments[0].url
-            
+                       (len(m.attachments) > 0 or m.content.strip().lower() in ['skip', 's']))
+
+            img_msg = await bot.wait_for('message', timeout=600, check=check_image_or_skip)  # 10 minutes for upload
+
+            if img_msg.content.strip().lower() in ['skip', 's']:
+                image_url = "No screenshot provided (skipped by user)"
+                await user.send("✅ Screenshot skipped. Proceeding with verification.")
+            else:
+                image_url = img_msg.attachments[0].url
+                await user.send("✅ Screenshot received.")
+
         except asyncio.TimeoutError:
             await user.send("⏰ Image upload timed out. Please start over by clicking the verification button again.")
             logger.info(f"Image upload timed out for {user}")
@@ -208,13 +371,15 @@ async def handle_verification_start(interaction):
         # Send to review channel
         guild = interaction.guild
         review_channel_id = config['review_channel_id']
-        
+
         if review_channel_id == "REPLACE_WITH_YOUR_REVIEW_CHANNEL_ID":
             await user.send("❌ Bot configuration error. Please contact an administrator.")
             logger.error("Review channel ID not configured properly")
             return
-            
-        vr_channel = guild.get_channel(int(review_channel_id))
+
+        # Extract actual ID from mention format if needed
+        clean_channel_id = extract_id(review_channel_id)
+        vr_channel = guild.get_channel(int(clean_channel_id))
         if vr_channel is None:
             await user.send("❌ Review channel not found. Please contact an administrator.")
             logger.error(f"Review channel {review_channel_id} not found or bot lacks access")
@@ -255,7 +420,7 @@ async def handle_verification_start(interaction):
             "You will receive a DM with the result once it's processed.\n\n"
             "Thank you for your patience! 🙏"
         )
-        
+
         logger.info(f"Verification request submitted for {user}")
 
     except discord.Forbidden:
@@ -271,23 +436,39 @@ async def handle_verification_start(interaction):
         logger.error(f"Error in verification process for {user}: {e}")
         await user.send("❌ An error occurred during verification. Please try again or contact an administrator.")
 
+def extract_id(id_string):
+    """Extract ID from mention format or return as-is if already an ID"""
+    if isinstance(id_string, str):
+        # Remove role mention format <@&123456789> -> 123456789
+        if id_string.startswith('<@&') and id_string.endswith('>'):
+            return id_string[3:-1]
+        # Remove channel mention format <#123456789> -> 123456789
+        elif id_string.startswith('<#') and id_string.endswith('>'):
+            return id_string[2:-1]
+        # Remove user mention format <@123456789> -> 123456789
+        elif id_string.startswith('<@') and id_string.endswith('>'):
+            return id_string[2:-1]
+    return str(id_string)
+
 async def handle_approval(interaction, custom_id):
     """Handle verification approval"""
     user_id = int(custom_id.split("_")[1])
     guild = interaction.guild
     user = guild.get_member(user_id)
-    
+
     if not user:
         await interaction.response.send_message("❌ User not found in server.", ephemeral=True)
         return
-    
+
     verified_role_id = config['verified_role_id']
     if verified_role_id == "REPLACE_WITH_YOUR_VERIFIED_ROLE_ID":
         await interaction.response.send_message("❌ Verified role not configured.", ephemeral=True)
         logger.error("Verified role ID not configured properly")
         return
-        
-    role = guild.get_role(int(verified_role_id))
+
+    # Extract actual ID from mention format if needed
+    clean_role_id = extract_id(verified_role_id)
+    role = guild.get_role(int(clean_role_id))
     if not role:
         await interaction.response.send_message("❌ Verified role not found.", ephemeral=True)
         logger.error(f"Verified role {verified_role_id} not found")
@@ -296,15 +477,15 @@ async def handle_approval(interaction, custom_id):
     try:
         await user.add_roles(role, reason=f"NSFW verification approved by {interaction.user}")
         await interaction.response.send_message(f"✅ **Approved** {user.mention} for NSFW access.", ephemeral=True)
-        
+
         # Update the original message
         embed = interaction.message.embeds[0]
         embed.color = 0x00ff00  # Green
         embed.title = "✅ NSFW Verification - APPROVED"
         embed.add_field(name="📋 Action", value=f"Approved by {interaction.user.mention}", inline=False)
-        
+
         await interaction.edit_original_response(embed=embed, view=None)
-        
+
         try:
             await user.send(
                 "🎉 **Verification Approved!**\n\n"
@@ -314,9 +495,9 @@ async def handle_approval(interaction, custom_id):
             )
         except discord.Forbidden:
             logger.info(f"Could not DM approval notification to {user}")
-            
+
         logger.info(f"NSFW verification approved for {user} by {interaction.user}")
-        
+
     except discord.Forbidden:
         await interaction.response.send_message("❌ I don't have permission to assign roles.", ephemeral=True)
         logger.error(f"No permission to assign role to {user}")
@@ -329,22 +510,22 @@ async def handle_rejection(interaction, custom_id):
     user_id = int(custom_id.split("_")[1])
     guild = interaction.guild
     user = guild.get_member(user_id)
-    
+
     if not user:
         await interaction.response.send_message("❌ User not found in server.", ephemeral=True)
         return
 
     try:
         await interaction.response.send_message(f"❌ **Rejected** {user.mention}'s verification request.", ephemeral=True)
-        
+
         # Update the original message
         embed = interaction.message.embeds[0]
         embed.color = 0xff0000  # Red
         embed.title = "❌ NSFW Verification - REJECTED"
         embed.add_field(name="📋 Action", value=f"Rejected by {interaction.user.mention}", inline=False)
-        
+
         await interaction.edit_original_response(embed=embed, view=None)
-        
+
         try:
             await user.send(
                 "❌ **Verification Rejected**\n\n"
@@ -357,9 +538,9 @@ async def handle_rejection(interaction, custom_id):
             )
         except discord.Forbidden:
             logger.info(f"Could not DM rejection notification to {user}")
-            
+
         logger.info(f"NSFW verification rejected for {user} by {interaction.user}")
-        
+
     except Exception as e:
         await interaction.response.send_message("❌ An error occurred while rejecting.", ephemeral=True)
         logger.error(f"Error rejecting {user}: {e}")
@@ -375,7 +556,7 @@ if __name__ == "__main__":
     if not token:
         logger.error("DISCORD_BOT_TOKEN environment variable not set")
         exit(1)
-    
+
     try:
         bot.run(token)
     except discord.LoginFailure:
